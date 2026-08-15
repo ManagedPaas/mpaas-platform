@@ -1,0 +1,22 @@
+{
+  "name": "mpaas-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "start:web": "node dist/apps/web/src/main.js",
+    "start:api": "node dist/apps/api/src/main.js",
+    "start:worker": "node dist/apps/worker/src/main.js",
+    "start:runner": "node dist/apps/runner/src/main.js"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

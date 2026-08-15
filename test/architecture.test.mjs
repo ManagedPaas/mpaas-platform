@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import { rmSync, writeFileSync } from "node:fs";
+import test from "node:test";
+import { findImportViolations, validateImport } from "../scripts/check-boundaries.mjs";
+
+test("source modules use only public cross-module APIs", () => {
+  assert.deepEqual(findImportViolations(), []);
+});
+
+test("boundary checker rejects a deep cross-module import", () => {
+  const importer = new URL("../apps/api/src/index.ts", import.meta.url).pathname;
+  const violations = validateImport(importer, "../../../packages/domain/src/tenant.js");
+
+  assert.equal(violations.length, 1);
+});
+
+test("boundary checker rejects an internal cross-module import", () => {
+  const importer = new URL("../apps/api/src/index.ts", import.meta.url).pathname;
+  const violations = validateImport(importer, "../../../packages/domain/src/internal/tenant.js");
+
+  assert.equal(violations.length, 1);
+});
+
+test("boundary checker discovers forbidden imports in .tsx files", (t) => {
+  const fixture = new URL("../apps/web/src/boundary-violation.fixture.tsx", import.meta.url);
+  t.after(() => rmSync(fixture, { force: true }));
+  writeFileSync(fixture, 'import "../../../packages/domain/src/internal/tenant.js";\n');
+
+  const violations = findImportViolations();
+
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /boundary-violation\.fixture\.tsx/);
+});
