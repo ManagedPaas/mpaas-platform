@@ -3,6 +3,7 @@ import { dirname, extname, join, normalize, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const sourceExtensions = new Set([".ts", ".tsx"]);
 
 export const moduleRoots = new Map([
   ["apps/web", "apps/web/src"],
@@ -18,7 +19,7 @@ function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return sourceFiles(path);
-    return extname(entry.name) === ".ts" ? [path] : [];
+    return sourceExtensions.has(extname(entry.name)) ? [path] : [];
   });
 }
 
