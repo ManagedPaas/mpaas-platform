@@ -8,8 +8,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "format:check": "node scripts/check-format.mjs",
+    "lint": "node scripts/check-lint.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "audit": "npm audit --omit=optional --audit-level=high",
     "test": "npm run build && node --test test/*.test.mjs",
     "start:web": "node dist/apps/web/src/main.js",
     "start:api": "node dist/apps/api/src/main.js",
