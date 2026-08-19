@@ -37,16 +37,25 @@ retry, credential, and runtime isolation, not independent microservices.
 ## Local verification
 
 ```sh
-npm install
-npm test
+npm ci --ignore-scripts --no-audit --no-fund
+npm run format:check
+npm run lint
 npm run typecheck
 npm run check:boundaries
+npm run check:secrets
+npm run audit
 npm run build
+npm test
 npm run start:web
 npm run start:api
 npm run start:worker
 npm run start:runner
 ```
+
+The CI workflow runs the same checks on pushes and pull requests with read-only
+repository permissions. The `validate` and `security-baseline` jobs are the
+required status checks for `main`; repository administrators must enforce those
+checks in GitHub branch protection before merges are allowed.
 
 The scaffold contains no product feature or cloud integration. It establishes
 module boundaries and start paths so the first vertical slice can be added without
