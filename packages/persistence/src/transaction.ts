@@ -9,20 +9,18 @@ export type TenantTransaction<T> = (client: PoolClient) => Promise<T>;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function withTenantTransaction<T>(
+export type TransactionSetup = (client: PoolClient) => Promise<void>;
+
+export async function withTransaction<T>(
   pool: TenantPool,
-  tenantId: TenantId,
+  setup: TransactionSetup,
   work: TenantTransaction<T>
 ): Promise<T> {
-  if (!uuidPattern.test(tenantId)) {
-    throw new Error("tenantId must be a UUID");
-  }
-
   const client = await pool.connect();
   let releaseError: Error | boolean | undefined;
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config($1, $2, true)", ["app.tenant_id", tenantId]);
+    await setup(client);
     const result = await work(client);
     await client.query("COMMIT");
     return result;
@@ -36,4 +34,22 @@ export async function withTenantTransaction<T>(
   } finally {
     client.release(releaseError);
   }
+}
+
+export async function withTenantTransaction<T>(
+  pool: TenantPool,
+  tenantId: TenantId,
+  work: TenantTransaction<T>
+): Promise<T> {
+  if (!uuidPattern.test(tenantId)) {
+    throw new Error("tenantId must be a UUID");
+  }
+
+  return withTransaction(
+    pool,
+    async (client) => {
+      await client.query("SELECT set_config($1, $2, true)", ["app.tenant_id", tenantId]);
+    },
+    work
+  );
 }
