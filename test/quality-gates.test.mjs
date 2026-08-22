@@ -48,6 +48,7 @@ test("workflow uses read-only permissions and pinned actions", () => {
   assert.match(workflow, /permissions:\n  contents: read/);
   assert.doesNotMatch(workflow, /secrets\./);
   assert.doesNotMatch(workflow, /actions\/cache/);
+  assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 2);
   for (const line of workflow.split("\n")) {
     if (line.includes(" uses: ")) assert.match(line, /@[0-9a-f]{40}/);
   }

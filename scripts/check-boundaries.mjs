@@ -12,7 +12,8 @@ export const moduleRoots = new Map([
   ["apps/runner", "apps/runner/src"],
   ["packages/domain", "packages/domain/src"],
   ["packages/contracts", "packages/contracts/src"],
-  ["packages/tool-sdk", "packages/tool-sdk/src"]
+  ["packages/tool-sdk", "packages/tool-sdk/src"],
+  ["packages/persistence", "packages/persistence/src"]
 ]);
 
 function sourceFiles(directory) {
