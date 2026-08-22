@@ -4,6 +4,7 @@ import test from "node:test";
 import { withTenantTransaction } from "../dist/packages/persistence/src/index.js";
 
 const migration = readFileSync("db/migrations/001_p1_006a_tenant_foundation.sql", "utf8");
+const authorizationMigration = readFileSync("db/migrations/002_p1_006b_api_authorization.sql", "utf8");
 const transaction = readFileSync("packages/persistence/src/transaction.ts", "utf8");
 
 test("tenant foundation declares the required isolated tables", () => {
@@ -36,6 +37,14 @@ test("transaction context is local and parameterized", () => {
   assert.match(transaction, /COMMIT/);
   assert.match(transaction, /ROLLBACK/);
   assert.match(transaction, /client\.release\(releaseError\)/);
+});
+
+test("API authorization resolves membership from an opaque subject before tenant context", () => {
+  assert.match(authorizationMigration, /current_setting\('app\.subject', true\)/);
+  assert.match(authorizationMigration, /subject_membership_lookup ON app\.users/);
+  assert.match(authorizationMigration, /subject_membership_lookup ON app\.memberships/);
+  assert.match(authorizationMigration, /GRANT EXECUTE ON FUNCTION app\.current_subject\(\) TO mpaas_api_runtime/);
+  assert.match(authorizationMigration, /DROP POLICY IF EXISTS subject_membership_lookup ON app\.memberships/);
 });
 
 function transactionFixture(rollbackError) {
