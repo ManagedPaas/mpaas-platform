@@ -13,22 +13,30 @@ if (!databaseUrl) {
   });
 } else {
   let adminPool;
+  let runtimeBackingPool;
   let runtimePool;
   const fixtures = {
     tenantA: randomUUID(),
     tenantB: randomUUID(),
     userA: randomUUID(),
     userB: randomUUID(),
+    sharedSubjectUserB: randomUUID(),
     manifestA: randomUUID()
   };
 
   before(async () => {
-    adminPool = new Pool({ connectionString: databaseUrl });
+    adminPool = new Pool({ connectionString: databaseUrl, max: 1 });
+    runtimeBackingPool = new Pool({ connectionString: databaseUrl, max: 1 });
     runtimePool = {
       connect: async () => {
-        const client = await adminPool.connect();
-        await client.query("SET ROLE mpaas_api_runtime");
-        return client;
+        const client = await runtimeBackingPool.connect();
+        try {
+          await client.query("SET ROLE mpaas_api_runtime");
+          return client;
+        } catch (error) {
+          client.release(error instanceof Error ? error : true);
+          throw error;
+        }
       }
     };
 
@@ -45,12 +53,29 @@ if (!databaseUrl) {
       [fixtures.tenantA, "tenant-a", fixtures.tenantB, "tenant-b"]
     );
     await adminPool.query(
-      "INSERT INTO app.users (id, tenant_id, external_subject) VALUES ($1, $2, $3), ($4, $5, $6)",
-      [fixtures.userA, fixtures.tenantA, "subject-a", fixtures.userB, fixtures.tenantB, "subject-b"]
+      "INSERT INTO app.users (id, tenant_id, external_subject) VALUES ($1, $2, $3), ($4, $5, $6), ($7, $8, $9)",
+      [
+        fixtures.userA,
+        fixtures.tenantA,
+        "subject-a",
+        fixtures.userB,
+        fixtures.tenantB,
+        "subject-b",
+        fixtures.sharedSubjectUserB,
+        fixtures.tenantB,
+        "subject-a"
+      ]
     );
     await adminPool.query(
-      "INSERT INTO app.memberships (tenant_id, user_id, membership_role) VALUES ($1, $2, 'owner'), ($3, $4, 'viewer')",
-      [fixtures.tenantA, fixtures.userA, fixtures.tenantB, fixtures.userB]
+      "INSERT INTO app.memberships (tenant_id, user_id, membership_role) VALUES ($1, $2, 'owner'), ($3, $4, 'viewer'), ($5, $6, 'developer')",
+      [
+        fixtures.tenantA,
+        fixtures.userA,
+        fixtures.tenantB,
+        fixtures.userB,
+        fixtures.tenantB,
+        fixtures.sharedSubjectUserB
+      ]
     );
     await adminPool.query(
       "INSERT INTO app.manifests (id, tenant_id, source_commit, payload) VALUES ($1, $2, 'a', $3)",
@@ -59,6 +84,7 @@ if (!databaseUrl) {
   });
 
   after(async () => {
+    await runtimeBackingPool?.end();
     await adminPool?.end();
   });
 
@@ -86,13 +112,47 @@ if (!databaseUrl) {
     assert.equal(created.tenantId, fixtures.tenantA);
   });
 
+  test("subject lookup policies stop widening identity reads after tenant context is set", async () => {
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config($1, $2, true)", ["app.subject", "subject-a"]);
+      await client.query("SELECT set_config($1, $2, true)", ["app.tenant_id", fixtures.tenantA]);
+
+      const users = await client.query("SELECT tenant_id FROM app.users ORDER BY tenant_id");
+      const memberships = await client.query("SELECT tenant_id FROM app.memberships ORDER BY tenant_id");
+
+      assert.deepEqual(users.rows.map((row) => row.tenant_id), [fixtures.tenantA]);
+      assert.deepEqual(memberships.rows.map((row) => row.tenant_id), [fixtures.tenantA]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  test("runtime role sessions cannot contaminate admin assertions", async () => {
+    const runtimeClient = await runtimePool.connect();
+    try {
+      const { rows } = await runtimeClient.query("SELECT current_user, session_user");
+      assert.equal(rows[0].current_user, "mpaas_api_runtime");
+    } finally {
+      runtimeClient.release();
+    }
+
+    const { rows } = await adminPool.query("SELECT current_user, session_user");
+    assert.equal(rows[0].current_user, rows[0].session_user);
+  });
+
   test("cross-tenant reads and mutations fail before repository access", async () => {
     let repositoryCalled = false;
     await assert.rejects(
       withAuthorizedTenantRequest(
         runtimePool,
-        { subject: "subject-a" },
-        fixtures.tenantB,
+        { subject: "subject-b" },
+        fixtures.tenantA,
         async () => {
           repositoryCalled = true;
           return [];
@@ -102,12 +162,12 @@ if (!databaseUrl) {
     );
     assert.equal(repositoryCalled, false);
 
-    const before = await adminPool.query("SELECT count(*)::int AS count FROM app.manifests WHERE tenant_id = $1", [fixtures.tenantB]);
+    const before = await adminPool.query("SELECT count(*)::int AS count FROM app.manifests WHERE tenant_id = $1", [fixtures.tenantA]);
     await assert.rejects(
       withAuthorizedTenantRequest(
         runtimePool,
-        { subject: "subject-a" },
-        fixtures.tenantB,
+        { subject: "subject-b" },
+        fixtures.tenantA,
         (repository) =>
           repository.createManifest({
             id: randomUUID(),
@@ -117,7 +177,7 @@ if (!databaseUrl) {
       ),
       TenantAccessDeniedError
     );
-    const after = await adminPool.query("SELECT count(*)::int AS count FROM app.manifests WHERE tenant_id = $1", [fixtures.tenantB]);
+    const after = await adminPool.query("SELECT count(*)::int AS count FROM app.manifests WHERE tenant_id = $1", [fixtures.tenantA]);
     assert.equal(after.rows[0].count, before.rows[0].count);
   });
 

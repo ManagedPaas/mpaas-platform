@@ -11,12 +11,16 @@ ALTER FUNCTION app.current_subject() OWNER TO mpaas_migration_owner;
 
 CREATE POLICY subject_membership_lookup ON app.users
   FOR SELECT TO mpaas_api_runtime
-  USING (external_subject = app.current_subject());
+  USING (
+    app.current_tenant_id() IS NULL
+    AND external_subject = app.current_subject()
+  );
 
 CREATE POLICY subject_membership_lookup ON app.memberships
   FOR SELECT TO mpaas_api_runtime
   USING (
-    EXISTS (
+    app.current_tenant_id() IS NULL
+    AND EXISTS (
       SELECT 1
       FROM app.users AS subject_user
       WHERE subject_user.tenant_id = memberships.tenant_id
