@@ -19,7 +19,8 @@ if (!databaseUrl) {
     userA: randomUUID(),
     userB: randomUUID(),
     manifestA: randomUUID(),
-    manifestB: randomUUID()
+    manifestB: randomUUID(),
+    auditA: randomUUID()
   };
 
   before(async () => {
@@ -57,6 +58,10 @@ if (!databaseUrl) {
         fixtures.tenantB,
         { tenant: "b" }
       ]
+    );
+    await adminPool.query(
+      "INSERT INTO app.audit_events (id, tenant_id, actor_user_id, event_type, event_hash) VALUES ($1, $2, $3, 'tenant-created', 'hash-a')",
+      [fixtures.auditA, fixtures.tenantA, fixtures.userA]
     );
   });
 
@@ -165,5 +170,31 @@ if (!databaseUrl) {
     } finally {
       client.release();
     }
+  });
+
+  test("API runtime cannot delete tenant roots or cascade audit history", async () => {
+    await assert.rejects(
+      withTenantTransaction(runtimePool, fixtures.tenantA, (client) =>
+        client.query("DELETE FROM app.tenants WHERE id = $1", [fixtures.tenantA])
+      ),
+      /permission denied/
+    );
+
+    const adminClient = await adminPool.connect();
+    try {
+      await adminClient.query("RESET ROLE");
+      await assert.rejects(
+        adminClient.query("DELETE FROM app.tenants WHERE id = $1", [fixtures.tenantA]),
+        /foreign key constraint/
+      );
+    } finally {
+      adminClient.release();
+    }
+
+    const { rows } = await adminPool.query(
+      "SELECT (SELECT count(*)::int FROM app.tenants WHERE id = $1) AS tenants, (SELECT count(*)::int FROM app.audit_events WHERE id = $2) AS audit_events",
+      [fixtures.tenantA, fixtures.auditA]
+    );
+    assert.deepEqual(rows[0], { tenants: 1, audit_events: 1 });
   });
 }

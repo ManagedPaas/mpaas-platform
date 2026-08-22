@@ -19,6 +19,7 @@ export async function withTenantTransaction<T>(
   }
 
   const client = await pool.connect();
+  let releaseError: Error | boolean | undefined;
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config($1, $2, true)", ["app.tenant_id", tenantId]);
@@ -26,9 +27,13 @@ export async function withTenantTransaction<T>(
     await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      releaseError = rollbackError instanceof Error ? rollbackError : true;
+    }
     throw error;
   } finally {
-    client.release();
+    client.release(releaseError);
   }
 }

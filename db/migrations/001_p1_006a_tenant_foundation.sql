@@ -102,7 +102,7 @@ CREATE TABLE app.deployments (
 
 CREATE TABLE app.audit_events (
   id uuid PRIMARY KEY,
-  tenant_id uuid NOT NULL REFERENCES app.tenants(id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES app.tenants(id) ON DELETE RESTRICT,
   actor_user_id uuid,
   event_type text NOT NULL,
   event_hash text NOT NULL,
@@ -166,8 +166,9 @@ CREATE POLICY tenant_isolation ON app.audit_events
   WITH CHECK (tenant_id = app.current_tenant_id());
 
 REVOKE ALL ON ALL TABLES IN SCHEMA app FROM PUBLIC;
-GRANT SELECT, INSERT, UPDATE, DELETE ON app.tenants, app.users, app.memberships,
-  app.repository_connections, app.manifests, app.executions, app.deployments TO mpaas_api_runtime;
+GRANT SELECT, INSERT, UPDATE ON app.tenants TO mpaas_api_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON app.users, app.memberships, app.repository_connections,
+  app.manifests, app.executions, app.deployments TO mpaas_api_runtime;
 GRANT SELECT ON app.audit_events TO mpaas_api_runtime;
 GRANT SELECT ON app.manifests, app.executions, app.deployments TO mpaas_worker_runtime;
 GRANT INSERT, UPDATE ON app.executions, app.deployments TO mpaas_worker_runtime;
