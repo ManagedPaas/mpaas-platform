@@ -15,12 +15,19 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "audit": "npm audit --omit=optional --audit-level=high",
     "test": "npm run build && node --test test/*.test.mjs",
+    "db:migrate": "node-pg-migrate up --migrations-dir db/migrations --check-order",
+    "test:integration": "node --test test/integration/*.test.mjs",
     "start:web": "node dist/apps/web/src/main.js",
     "start:api": "node dist/apps/api/src/main.js",
     "start:worker": "node dist/apps/worker/src/main.js",
     "start:runner": "node dist/apps/runner/src/main.js"
   },
   "devDependencies": {
+    "@types/pg": "8.23.1",
+    "node-pg-migrate": "9.0.0",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
   }
 }

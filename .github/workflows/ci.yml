@@ -11,6 +11,19 @@ jobs:
   validate:
     name: validate
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.15-bookworm@sha256:0933d60933003cb2d0e4f074ba8a83542fe203803fece22be97795e06ccbdfdc
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mpaas_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mpaas_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -42,6 +55,14 @@ jobs:
         run: npm run build
       - name: Test
         run: npm test
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/mpaas_test
+        run: npm run db:migrate
+      - name: Test PostgreSQL tenant isolation
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/mpaas_test
+        run: npm run test:integration
 
   security-baseline:
     name: security-baseline
